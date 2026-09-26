@@ -11,6 +11,7 @@ import {
   formatSui,
   OWNER_CAP_TYPE,
   OwnerCapBcs,
+  shortAddress,
   tipSummary,
   withdrawAllTx,
 } from "./tipJar";
@@ -109,22 +110,26 @@ function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner:
   const jar = useJar(jarId);
   const deposits = usePendingDeposits(jarId);
   const { run, pending, error } = useTransact();
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"link" | "address" | null>(null);
   const [showActivity, setShowActivity] = useState(false);
   const funds = jar.data ? BigInt(jar.data.funds) : 0n;
   const waiting = deposits.data?.total ?? 0n;
   const waitingCount = deposits.data ? deposits.data.coinIds.length + (deposits.data.addressBalance > 0n ? 1 : 0) : 0;
 
-  async function copy() {
-    await navigator.clipboard.writeText(tipLink(jarId));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  async function copy(what: "link" | "address") {
+    await navigator.clipboard.writeText(what === "link" ? tipLink(jarId) : jarId);
+    setCopied(what);
+    setTimeout(() => setCopied(null), 1500);
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-mono text-sm break-all">{jarId}</CardTitle>
+        {/* Shortened on purpose: Sui addresses have no checksum, so a retyped or
+            photo-scanned address with one wrong character sends funds to nobody. */}
+        <CardTitle title={jarId}>
+          Tip jar <span className="font-mono text-sm text-muted-foreground">{shortAddress(jarId)}</span>
+        </CardTitle>
         <CardDescription>
           {jar.data ? `${tipSummary(jar.data)} all-time` : "Loading..."}
         </CardDescription>
@@ -140,13 +145,17 @@ function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner:
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={copy}>
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied" : "Copy tip link"}
+          <Button variant="secondary" onClick={() => copy("link")}>
+            {copied === "link" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied === "link" ? "Copied" : "Copy tip link"}
+          </Button>
+          <Button variant="secondary" onClick={() => copy("address")}>
+            {copied === "address" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied === "address" ? "Copied" : "Copy jar address"}
           </Button>
           <a href={tipLink(jarId)}>
             <Button variant="secondary">
-              <ExternalLink className="h-4 w-4" /> Open tip page
+              <ExternalLink className="h-4 w-4" /> Open tip page (QR)
             </Button>
           </a>
           {deposits.data && waiting > 0n && (

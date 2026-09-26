@@ -82,7 +82,11 @@ function AnyWalletCard({ jarId }: { jarId: string }) {
         <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
           <li>Open your Sui wallet and choose <strong>Send</strong>.</li>
           <li>Scan the QR code, or paste the address above.</li>
-          <li>Enter an amount of SUI and confirm.</li>
+          <li>Enter an amount of SUI.</li>
+          <li>
+            <strong className="text-foreground">Always scan or copy, never type or photo-read the address.</strong> Sui
+            addresses have no typo check: one wrong character, even in the middle, sends SUI to an address nobody owns.
+          </li>
         </ol>
         <p className="rounded-md border border-sui/40 bg-sui/10 px-3 py-2 text-xs">
           This jar is on <strong>Sui Testnet</strong>. Switch your wallet to Testnet and send <strong>SUI only</strong>.
