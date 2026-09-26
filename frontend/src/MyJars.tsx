@@ -41,11 +41,11 @@ function Welcome() {
         className="mx-auto h-40 w-40 drop-shadow-[0_0_40px_rgb(160_80_255/0.45)]"
       />
       <h1 className="mt-6 text-4xl font-bold tracking-tight">
-        Tips from{" "}
-        <span className="bg-linear-to-r from-sui via-violet to-magenta bg-clip-text text-transparent">any wallet</span>
+        Tipping{" "}
+        <span className="bg-linear-to-r from-sui via-violet to-magenta bg-clip-text text-transparent">on Chain</span>
       </h1>
       <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-        Create an on-chain tip jar, share one QR code, and receive SUI from anyone, even if they never open this app.
+        Create an on-chain tip jar, share one QR code, and receive SUI or USDC from anyone, even if they never open this app.
       </p>
       <div className="mt-10 grid gap-4 text-left sm:grid-cols-3">
         {STEPS.map((s) => (
