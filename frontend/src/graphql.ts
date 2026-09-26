@@ -1,0 +1,75 @@
+import { PACKAGE_ID } from "./tipJar";
+
+const GRAPHQL_URL = "https://graphql.testnet.sui.io/graphql";
+
+export async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+  const res = await fetch(GRAPHQL_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+  });
+  const body = await res.json();
+  if (body.errors?.length) throw new Error(body.errors[0].message);
+  return body.data as T;
+}
+
+export type EventRecord<T> = { timestamp: string; digest: string; json: T };
+
+/** The most recent events of one type emitted by the tip_jar module. */
+export async function fetchEvents<T>(name: string, last = 50): Promise<EventRecord<T>[]> {
+  const data = await gql<{
+    events: { nodes: { timestamp: string; transaction: { digest: string }; contents: { json: T } }[] };
+  }>(
+    `query($type: String!, $last: Int!) {
+      events(filter: { type: $type }, last: $last) {
+        nodes { timestamp transaction { digest } contents { json } }
+      }
+    }`,
+    { type: `${PACKAGE_ID}::tip_jar::${name}`, last },
+  );
+  return data.events.nodes.map((n) => ({ timestamp: n.timestamp, digest: n.transaction.digest, json: n.contents.json }));
+}
+
+/** Every jar announces itself with a JarCreated event. */
+export async function fetchJarIds(): Promise<string[]> {
+  const events = await fetchEvents<{ jar_id: string }>("JarCreated");
+  return events.map((e) => e.json.jar_id);
+}
+
+export type DirectDeposit = { timestamp: string; digest: string; from: string; amount: bigint };
+
+/**
+ * Plain wallet sends never run our contract, so they emit no event. The chain
+ * still records them: find transactions that touched the jar's address and
+ * keep the ones that *added* SUI to it.
+ */
+export async function fetchDirectDeposits(jarId: string): Promise<DirectDeposit[]> {
+  const data = await gql<{
+    transactions: {
+      nodes: {
+        digest: string;
+        sender: { address: string } | null;
+        effects: { timestamp: string; balanceChanges: { nodes: { owner: { address: string } | null; amount: string }[] } };
+      }[];
+    };
+  }>(
+    `query($address: SuiAddress!) {
+      transactions(filter: { affectedAddress: $address }, last: 30) {
+        nodes {
+          digest
+          sender { address }
+          effects { timestamp balanceChanges { nodes { owner { address } amount } } }
+        }
+      }
+    }`,
+    { address: jarId },
+  );
+  return data.transactions.nodes.flatMap((tx) => {
+    const received = tx.effects.balanceChanges.nodes
+      .filter((b) => b.owner?.address === jarId && BigInt(b.amount) > 0n)
+      .reduce((sum, b) => sum + BigInt(b.amount), 0n);
+    return received > 0n
+      ? [{ timestamp: tx.effects.timestamp, digest: tx.digest, from: tx.sender?.address ?? "unknown", amount: received }]
+      : [];
+  });
+}
