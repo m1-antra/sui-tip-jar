@@ -12,8 +12,11 @@
 /// - `OwnerCap` -> owned object (only its owner can put it in a transaction)
 module tip_jar::tip_jar;
 
+use std::ascii::String;
+use std::type_name;
 use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
+use sui::dynamic_field as df;
 use sui::event;
 use sui::sui::SUI;
 use sui::transfer::Receiving;
@@ -165,4 +168,121 @@ fun record_direct(jar: &mut TipJar, deposit: Balance<SUI>, ctx: &TxContext) {
     jar.total_tipped = jar.total_tipped + amount;
     jar.total_direct = jar.total_direct + amount;
     event::emit(DirectDepositCollected { jar_id: object::id(jar), amount, by: ctx.sender() });
+}
+
+// === Other coins (e.g. USDC) ===
+//
+// Added in a package upgrade, so `TipJar` itself can't change. Each coin type
+// gets its own vault, attached to the jar's UID as a dynamic field keyed by
+// `TokenKey<T>`. SUI keeps using the functions above (`ENotAToken` otherwise).
+
+const ENotAToken: u64 = 4;
+
+public struct TokenKey<phantom T> has copy, drop, store {}
+
+public struct TokenVault<phantom T> has store {
+    funds: Balance<T>,
+    total_tipped: u64,
+    tip_count: u64,
+    total_direct: u64,
+}
+
+public struct TokenTipReceived has copy, drop {
+    jar_id: ID,
+    coin_type: String,
+    tipper: address,
+    amount: u64,
+}
+
+public struct TokenDepositCollected has copy, drop {
+    jar_id: ID,
+    coin_type: String,
+    amount: u64,
+    by: address,
+}
+
+public struct TokenWithdrawn has copy, drop {
+    jar_id: ID,
+    coin_type: String,
+    by: address,
+    amount: u64,
+}
+
+public fun tip_token<T>(jar: &mut TipJar, payment: Coin<T>, ctx: &TxContext) {
+    let amount = payment.value();
+    assert!(amount > 0, EZeroTip);
+    let jar_id = object::id(jar);
+    let vault = vault_mut<T>(jar);
+    vault.funds.join(payment.into_balance());
+    vault.total_tipped = vault.total_tipped + amount;
+    vault.tip_count = vault.tip_count + 1;
+    event::emit(TokenTipReceived { jar_id, coin_type: coin_type<T>(), tipper: ctx.sender(), amount });
+}
+
+public fun collect_token_address_deposits<T>(
+    jar: &mut TipJar,
+    cap: &OwnerCap,
+    amount: u64,
+    ctx: &TxContext,
+) {
+    assert!(cap.jar_id == object::id(jar), EWrongCap);
+    assert!(amount > 0, ENothingToCollect);
+    let deposit = balance::redeem_funds(balance::withdraw_funds_from_object<T>(&mut jar.id, amount));
+    record_token_direct(jar, deposit, ctx);
+}
+
+public fun collect_token_coin_deposit<T>(
+    jar: &mut TipJar,
+    cap: &OwnerCap,
+    coin: Receiving<Coin<T>>,
+    ctx: &TxContext,
+) {
+    assert!(cap.jar_id == object::id(jar), EWrongCap);
+    let deposit = transfer::public_receive(&mut jar.id, coin).into_balance();
+    assert!(deposit.value() > 0, ENothingToCollect);
+    record_token_direct(jar, deposit, ctx);
+}
+
+public fun withdraw_all_token<T>(jar: &mut TipJar, cap: &OwnerCap, ctx: &mut TxContext): Coin<T> {
+    assert!(cap.jar_id == object::id(jar), EWrongCap);
+    let jar_id = object::id(jar);
+    let vault = vault_mut<T>(jar);
+    let amount = vault.funds.value();
+    let payout = coin::take(&mut vault.funds, amount, ctx);
+    event::emit(TokenWithdrawn { jar_id, coin_type: coin_type<T>(), by: ctx.sender(), amount });
+    payout
+}
+
+public fun token_funds<T>(jar: &TipJar): u64 {
+    if (!df::exists_with_type<TokenKey<T>, TokenVault<T>>(&jar.id, TokenKey<T> {})) return 0;
+    df::borrow<TokenKey<T>, TokenVault<T>>(&jar.id, TokenKey<T> {}).funds.value()
+}
+
+public fun token_total_tipped<T>(jar: &TipJar): u64 {
+    if (!df::exists_with_type<TokenKey<T>, TokenVault<T>>(&jar.id, TokenKey<T> {})) return 0;
+    df::borrow<TokenKey<T>, TokenVault<T>>(&jar.id, TokenKey<T> {}).total_tipped
+}
+
+/// Creates the coin's vault on first use.
+fun vault_mut<T>(jar: &mut TipJar): &mut TokenVault<T> {
+    assert!(type_name::with_defining_ids<T>() != type_name::with_defining_ids<SUI>(), ENotAToken);
+    if (!df::exists_with_type<TokenKey<T>, TokenVault<T>>(&jar.id, TokenKey<T> {})) {
+        let vault = TokenVault<T> { funds: balance::zero(), total_tipped: 0, tip_count: 0, total_direct: 0 };
+        df::add(&mut jar.id, TokenKey<T> {}, vault);
+    };
+    df::borrow_mut(&mut jar.id, TokenKey<T> {})
+}
+
+fun record_token_direct<T>(jar: &mut TipJar, deposit: Balance<T>, ctx: &TxContext) {
+    let jar_id = object::id(jar);
+    let amount = deposit.value();
+    let vault = vault_mut<T>(jar);
+    vault.funds.join(deposit);
+    vault.total_tipped = vault.total_tipped + amount;
+    vault.total_direct = vault.total_direct + amount;
+    event::emit(TokenDepositCollected { jar_id, coin_type: coin_type<T>(), amount, by: ctx.sender() });
+}
+
+fun coin_type<T>(): String {
+    type_name::with_defining_ids<T>().into_string()
 }
