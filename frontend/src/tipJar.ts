@@ -54,9 +54,12 @@ export function withdrawAllTx(jarId: string, capId: string, owner: string): Tran
   return tx;
 }
 
+export function tipCount(count: string): string {
+  return count === "1" ? "1 tip" : `${count} tips`;
+}
+
 export function tipSummary(jar: { tip_count: string; total_tipped: string }): string {
-  const tips = jar.tip_count === "1" ? "1 tip" : `${jar.tip_count} tips`;
-  return `${tips} · ${formatSui(jar.total_tipped)} SUI received`;
+  return `${tipCount(jar.tip_count)} · ${formatSui(jar.total_tipped)} SUI received`;
 }
 
 // === SUI <-> MIST helpers (never use floating point for money) ===
