@@ -1,15 +1,46 @@
 # Sui Tip Jar
 
+![Sui Tip Jar](submission/cover.png)
+
 A shared, on-chain tip jar on Sui. Anyone can tip SUI into a jar. Only the holder of that jar's `OwnerCap` can withdraw from it.
 
+**Live app (testnet):** https://m1-antra.github.io/sui-tip-jar/
+
 ## Layout
+
+This is a monorepo: the smart contract and the web app live side by side.
 
 | Path | What it is |
 | --- | --- |
 | `move/tip_jar/sources/tip_jar.move` | Move contract (shared `TipJar` and owned `OwnerCap`) |
 | `move/tip_jar/tests/tip_jar_tests.move` | `test_scenario` tests, including the wrong-cap attack |
-| `ts/src/ptb.ts` | PTB builders for create, tip and withdraw (`@mysten/sui`) |
-| `frontend/` | React + dApp Kit web app (owner dashboard and tip page) |
+| `frontend/` | React + dApp Kit web app (owner dashboard, tip page, all-jars view) |
+| `ts/src/ptb.ts` | Standalone PTB builders for create, tip and withdraw (`@mysten/sui`) |
+| `.github/workflows/deploy.yml` | Builds `frontend/` and deploys it to GitHub Pages on every push |
+| `submission/` | Logo, cover image and screenshots |
+
+There is no backend server. The browser talks to Sui directly: it writes through wallet-signed transactions and reads through the public fullnode (gRPC) and GraphQL APIs.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Blockchain | Sui (testnet) |
+| Smart contract | Move 2024 edition, Sui framework (`coin`, `balance`, `event`, `transfer`) |
+| Contract tests | `sui move test` with `sui::test_scenario` |
+| Transactions | Programmable Transaction Blocks via `@mysten/sui` (TypeScript SDK v2) |
+| Wallet connection | `@mysten/dapp-kit-react` (Slush and other Wallet Standard wallets) |
+| Chain reads | `SuiGrpcClient` (objects), Sui GraphQL (`JarCreated` events), BCS decoding |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, lucide-react |
+| Hosting / CI | GitHub Pages via GitHub Actions |
+| Tooling | Sui CLI (installed with `suiup`), Node.js, npm |
+
+## Security model
+
+- **Capability, not address checks:** withdrawing needs the jar's `OwnerCap` object. Only its owner can put it in a transaction.
+- **A cap only opens its own jar:** `withdraw` asserts `cap.jar_id == object::id(jar)`. The `cap_from_another_jar_cannot_withdraw` test covers this.
+- **Exact payments:** the client splits the exact tip off the gas coin, and `tip()` consumes the whole coin it is given.
+- **No custody:** each jar holds its own `Balance<SUI>`. Nothing is pooled, and the website never holds funds.
 
 ## How it works
 
@@ -17,6 +48,11 @@ A shared, on-chain tip jar on Sui. Anyone can tip SUI into a jar. Only the holde
 2. The owner shares the tip link (`/?jar=<jar id>`).
 3. **Supporters** open the link, connect a wallet and send a tip. The transaction splits the exact amount off their gas coin and passes it to `tip()`.
 4. The owner clicks **Withdraw all**. `withdraw_all()` checks that the `OwnerCap` belongs to this jar before paying out.
+5. **All jars** (`/?view=all`) lists every jar ever created, with how much each one currently holds. It finds them through their `JarCreated` events.
+
+| Tip page | All jars |
+| --- | --- |
+| ![Tip page](submission/screenshot-tip-page.png) | ![All jars](submission/screenshot-all-jars.png) |
 
 ## Run the web app
 
