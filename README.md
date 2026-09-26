@@ -14,7 +14,7 @@ This is a monorepo: the smart contract and the web app live side by side.
 | --- | --- |
 | `move/tip_jar/sources/tip_jar.move` | Move contract (shared `TipJar` and owned `OwnerCap`) |
 | `move/tip_jar/tests/tip_jar_tests.move` | `test_scenario` tests, including the wrong-cap attack |
-| `frontend/` | React + dApp Kit web app (owner dashboard, tip page with QR code, all-jars view) |
+| `frontend/` | React + dApp Kit web app (owner dashboard, tip page with QR code and activity) |
 | `.github/workflows/deploy.yml` | Builds `frontend/` and deploys it to GitHub Pages on every push |
 | `submission/` | Logo, cover image and screenshots |
 
@@ -52,11 +52,10 @@ There is no backend server. The browser talks to Sui directly: it writes through
 4. **Direct deposits are counted, then collected.** A plain wallet send never runs contract code, so the app reads it from the chain. Depending on the wallet, it's either in the jar's address balance or a `Coin` object sent to the jar. The owner's card shows it as *waiting to collect*. **Collect deposits** calls `collect_address_deposits` / `collect_coin_deposit`, which move it into the jar and add it to `total_tipped` and `total_direct`.
 5. **Withdraw all** runs one PTB: it collects any waiting deposits, then `withdraw_all()`, then sends the payout to the owner.
 6. **Jar activity** is a public record of every app tip, direct deposit, collection and withdrawal. It merges contract events with the chain's transaction history for the jar's address.
-7. **All jars** (`/?view=all`) lists every jar, with how much each one holds including deposits not yet collected. It finds jars through their `JarCreated` events.
 
-| Tip page | All jars |
+| Home | Tip page (mobile) |
 | --- | --- |
-| ![Tip page](submission/screenshot-tip-page.png) | ![All jars](submission/screenshot-all-jars.png) |
+| ![Home](submission/screenshot-home.png) | ![Tip page on mobile](submission/screenshot-tip-page-mobile.png) |
 
 ## Run the web app
 
