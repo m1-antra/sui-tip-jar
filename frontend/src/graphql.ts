@@ -30,12 +30,6 @@ export async function fetchEvents<T>(name: string, last = 50): Promise<EventReco
   return data.events.nodes.map((n) => ({ timestamp: n.timestamp, digest: n.transaction.digest, json: n.contents.json }));
 }
 
-/** Every jar announces itself with a JarCreated event. */
-export async function fetchJarIds(): Promise<string[]> {
-  const events = await fetchEvents<{ jar_id: string }>("JarCreated");
-  return events.map((e) => e.json.jar_id);
-}
-
 export type DirectDeposit = { timestamp: string; digest: string; from: string; amount: bigint };
 
 /**

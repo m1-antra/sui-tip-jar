@@ -1,34 +1,28 @@
 import { ConnectButton } from "@mysten/dapp-kit-react/ui";
-import { AllJars } from "./AllJars";
 import { MyJars } from "./MyJars";
 import { TipPage } from "./TipPage";
 
-// ?jar=0x... -> tip page, ?view=all -> every jar, nothing -> the owner view.
-const params = new URLSearchParams(window.location.search);
-const jarId = params.get("jar");
-const showAll = params.get("view") === "all";
+// ?jar=0x... -> tip page, nothing -> the owner view.
+const jarId = new URLSearchParams(window.location.search).get("jar");
 const home = window.location.pathname;
+const logo = `${import.meta.env.BASE_URL}logo.png`;
 
 function App() {
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <nav className="flex items-center gap-6">
-            <a href={home} className="text-lg font-semibold">
+          <a href={home} className="flex items-center gap-2 text-lg font-semibold">
+            <img src={logo} alt="" className="h-8 w-8" />
+            <span className="bg-linear-to-r from-sui via-violet to-magenta bg-clip-text text-transparent">
               Sui Tip Jar
-            </a>
-            <a href={`${home}?view=all`} className="text-sm text-muted-foreground hover:text-foreground">
-              All jars
-            </a>
-          </nav>
+            </span>
+          </a>
           <ConnectButton />
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        {jarId ? <TipPage jarId={jarId} /> : showAll ? <AllJars /> : <MyJars />}
-      </main>
+      <main className="container mx-auto px-4 py-8">{jarId ? <TipPage jarId={jarId} /> : <MyJars />}</main>
     </div>
   );
 }

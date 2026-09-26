@@ -22,6 +22,42 @@ export function tipLink(jarId: string) {
   return `${window.location.origin}${window.location.pathname}?jar=${jarId}`;
 }
 
+const STEPS = [
+  { title: "1. Create a jar", text: "One click mints your jar on Sui and hands you its owner key (an OwnerCap)." },
+  { title: "2. Share the QR", text: "Supporters scan it with any Sui wallet and hit Send. No app or account needed." },
+  { title: "3. Collect & withdraw", text: "Every deposit is recorded. Collect them into the jar and withdraw in one step." },
+];
+
+function Welcome() {
+  return (
+    <div className="mx-auto max-w-3xl py-8 text-center">
+      <img
+        src={`${import.meta.env.BASE_URL}logo.png`}
+        alt="Sui Tip Jar logo"
+        className="mx-auto h-40 w-40 drop-shadow-[0_0_40px_rgb(160_80_255/0.45)]"
+      />
+      <h1 className="mt-6 text-4xl font-bold tracking-tight">
+        Tips from{" "}
+        <span className="bg-linear-to-r from-sui via-violet to-magenta bg-clip-text text-transparent">any wallet</span>
+      </h1>
+      <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
+        Create an on-chain tip jar, share one QR code, and receive SUI from anyone, even if they never open this app.
+      </p>
+      <div className="mt-10 grid gap-4 text-left sm:grid-cols-3">
+        {STEPS.map((s) => (
+          <Card key={s.title}>
+            <CardHeader>
+              <CardTitle>{s.title}</CardTitle>
+              <CardDescription>{s.text}</CardDescription>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
+      <p className="mt-8 text-sm text-muted-foreground">Connect a wallet (top right) to create your jar.</p>
+    </div>
+  );
+}
+
 /** Owner view: every OwnerCap in the wallet is a jar you control. */
 export function MyJars() {
   const account = useCurrentAccount();
@@ -41,16 +77,7 @@ export function MyJars() {
     },
   });
 
-  if (!account) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Welcome</CardTitle>
-          <CardDescription>Connect a wallet to create a tip jar or see the ones you own.</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
+  if (!account) return <Welcome />;
 
   return (
     <div className="space-y-6">
