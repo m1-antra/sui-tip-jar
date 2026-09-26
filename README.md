@@ -9,6 +9,24 @@ A shared, on-chain tip jar on Sui. Anyone can tip SUI into a jar. Only the holde
 | `move/tip_jar/sources/tip_jar.move` | Move contract (shared `TipJar` and owned `OwnerCap`) |
 | `move/tip_jar/tests/tip_jar_tests.move` | `test_scenario` tests, including the wrong-cap attack |
 | `ts/src/ptb.ts` | PTB builders for create, tip and withdraw (`@mysten/sui`) |
+| `frontend/` | React + dApp Kit web app (owner dashboard and tip page) |
+
+## How it works
+
+1. **Owner** connects a wallet and clicks **Create a jar**. The jar is a shared object that anyone can tip into. The owner receives an `OwnerCap`, which is the key to that jar.
+2. The owner shares the tip link (`/?jar=<jar id>`).
+3. **Supporters** open the link, connect a wallet and send a tip. The transaction splits the exact amount off their gas coin and passes it to `tip()`.
+4. The owner clicks **Withdraw all**. `withdraw_all()` checks that the `OwnerCap` belongs to this jar before paying out.
+
+## Run the web app
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 in a browser that has the [Slush](https://slush.app) wallet on **Testnet** with some testnet SUI.
 
 ## Build and test the contract
 
