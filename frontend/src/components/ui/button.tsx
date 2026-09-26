@@ -4,7 +4,8 @@ import { cn } from "../../lib/utils";
 type Variant = "primary" | "secondary";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-sui text-black hover:opacity-90",
+  primary:
+    "bg-linear-to-r from-sui via-violet to-magenta text-white shadow-[0_0_18px_rgb(160_80_255/0.35)] hover:opacity-90",
   secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
 };
 
