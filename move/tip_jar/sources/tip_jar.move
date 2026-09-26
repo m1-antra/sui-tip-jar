@@ -1,6 +1,12 @@
 /// A shared tip jar anyone can pay into, where only the holder of the
 /// matching `OwnerCap` can withdraw.
 ///
+/// Money reaches a jar in two ways:
+/// - `tip()`, called by this app: counted immediately.
+/// - A plain wallet "Send" to the jar's ID: the contract doesn't run, so the
+///   funds wait at the jar's address until the owner collects them with
+///   `collect_address_deposits` / `collect_coin_deposit`.
+///
 /// Ownership model:
 /// - `TipJar`   -> shared object (anyone can pass `&mut TipJar` to `tip`)
 /// - `OwnerCap` -> owned object (only its owner can put it in a transaction)
@@ -10,20 +16,26 @@ use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
 use sui::event;
 use sui::sui::SUI;
+use sui::transfer::Receiving;
 
 // === Errors ===
 
 const EZeroTip: u64 = 0;
 const EWrongCap: u64 = 1;
 const EInsufficientFunds: u64 = 2;
+const ENothingToCollect: u64 = 3;
 
 // === Objects ===
 
 public struct TipJar has key {
     id: UID,
     funds: Balance<SUI>,
+    /// Everything that ever entered the jar: app tips + collected direct deposits.
     total_tipped: u64,
+    /// Number of tips made through `tip()`.
     tip_count: u64,
+    /// SUI collected from direct wallet sends to the jar's ID.
+    total_direct: u64,
 }
 
 /// Withdraw rights for exactly one jar. `store` lets the owner transfer
@@ -46,6 +58,12 @@ public struct TipReceived has copy, drop {
     amount: u64,
 }
 
+public struct DirectDepositCollected has copy, drop {
+    jar_id: ID,
+    amount: u64,
+    by: address,
+}
+
 public struct Withdrawn has copy, drop {
     jar_id: ID,
     by: address,
@@ -63,6 +81,7 @@ public fun create(ctx: &mut TxContext): OwnerCap {
         funds: balance::zero(),
         total_tipped: 0,
         tip_count: 0,
+        total_direct: 0,
     };
     let jar_id = object::id(&jar);
     event::emit(JarCreated { jar_id, creator: ctx.sender() });
@@ -79,6 +98,33 @@ public fun tip(jar: &mut TipJar, payment: Coin<SUI>, ctx: &TxContext) {
     jar.total_tipped = jar.total_tipped + amount;
     jar.tip_count = jar.tip_count + 1;
     event::emit(TipReceived { jar_id: object::id(jar), tipper: ctx.sender(), amount });
+}
+
+/// Pulls SUI that wallets sent to the jar's ID (its address balance) into the jar.
+/// Only this module can do this, because it needs `&mut` access to the jar's UID.
+public fun collect_address_deposits(
+    jar: &mut TipJar,
+    cap: &OwnerCap,
+    amount: u64,
+    ctx: &TxContext,
+) {
+    assert!(cap.jar_id == object::id(jar), EWrongCap);
+    assert!(amount > 0, ENothingToCollect);
+    let deposit = balance::redeem_funds(balance::withdraw_funds_from_object<SUI>(&mut jar.id, amount));
+    record_direct(jar, deposit, ctx);
+}
+
+/// Some wallets transfer a whole `Coin` object to the jar's ID instead.
+public fun collect_coin_deposit(
+    jar: &mut TipJar,
+    cap: &OwnerCap,
+    coin: Receiving<Coin<SUI>>,
+    ctx: &TxContext,
+) {
+    assert!(cap.jar_id == object::id(jar), EWrongCap);
+    let deposit = transfer::public_receive(&mut jar.id, coin).into_balance();
+    assert!(deposit.value() > 0, ENothingToCollect);
+    record_direct(jar, deposit, ctx);
 }
 
 public fun withdraw(
@@ -107,4 +153,16 @@ public fun total_tipped(jar: &TipJar): u64 { jar.total_tipped }
 
 public fun tip_count(jar: &TipJar): u64 { jar.tip_count }
 
+public fun total_direct(jar: &TipJar): u64 { jar.total_direct }
+
 public fun jar_id(cap: &OwnerCap): ID { cap.jar_id }
+
+// === Internal ===
+
+fun record_direct(jar: &mut TipJar, deposit: Balance<SUI>, ctx: &TxContext) {
+    let amount = deposit.value();
+    jar.funds.join(deposit);
+    jar.total_tipped = jar.total_tipped + amount;
+    jar.total_direct = jar.total_direct + amount;
+    event::emit(DirectDepositCollected { jar_id: object::id(jar), amount, by: ctx.sender() });
+}
