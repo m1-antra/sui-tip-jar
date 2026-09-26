@@ -1,0 +1,9 @@
+[package]
+name = "tip_jar"
+edition = "2024"
+
+# Sui framework / std are implicit dependencies on recent Sui CLIs.
+[dependencies]
+
+[addresses]
+tip_jar = "0x0"
