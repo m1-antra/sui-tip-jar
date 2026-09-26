@@ -1,6 +1,6 @@
 import { ArrowDownToLine, ArrowUpFromLine, Heart, Loader2, Send } from "lucide-react";
 import type { ReactNode } from "react";
-import { formatSui, shortAddress } from "./tipJar";
+import { formatAmount, shortAddress } from "./tipJar";
 import { type ActivityKind, useJarActivity } from "./useJarActivity";
 
 const LABELS: Record<ActivityKind, { icon: ReactNode; text: string; sign: string }> = {
@@ -29,7 +29,7 @@ export function JarActivity({ jarId }: { jarId: string }) {
       {activity.data.map((a) => {
         const label = LABELS[a.kind];
         return (
-          <li key={`${a.digest}-${a.kind}-${a.amount}`} className="flex items-center gap-3 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+          <li key={`${a.digest}-${a.kind}-${a.token.symbol}-${a.amount}`} className="flex items-center gap-3 rounded-md border bg-muted/50 px-3 py-2 text-sm">
             {label.icon}
             <span className="min-w-0 flex-1">
               {label.text}{" "}
@@ -45,7 +45,7 @@ export function JarActivity({ jarId }: { jarId: string }) {
             </span>
             <span className="shrink-0 font-medium">
               {label.sign}
-              {formatSui(a.amount)} SUI
+              {formatAmount(a.amount, a.token)} {a.token.symbol}
             </span>
           </li>
         );

@@ -8,11 +8,14 @@ import { JarActivity } from "./JarActivity";
 import {
   collectDepositsTx,
   createJarTx,
-  formatSui,
+  formatAmount,
   OWNER_CAP_TYPE,
   OwnerCapBcs,
   shortAddress,
-  tipSummary,
+  SUI,
+  type Token,
+  TOKENS,
+  USDC,
   withdrawAllTx,
 } from "./tipJar";
 import { useJar } from "./useJar";
@@ -112,9 +115,10 @@ function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner:
   const { run, pending, error } = useTransact();
   const [copied, setCopied] = useState<"link" | "address" | null>(null);
   const [showActivity, setShowActivity] = useState(false);
-  const funds = jar.data ? BigInt(jar.data.funds) : 0n;
-  const waiting = deposits.data?.total ?? 0n;
-  const waitingCount = deposits.data ? deposits.data.coinIds.length + (deposits.data.addressBalance > 0n ? 1 : 0) : 0;
+  const inJar = (t: Token) => jar.data?.[t.symbol].inJar ?? 0n;
+  const waiting = (t: Token) => deposits.data?.[t.symbol].total ?? 0n;
+  const anyWaiting = TOKENS.some((t) => waiting(t) > 0n);
+  const anyHeld = TOKENS.some((t) => inJar(t) + waiting(t) > 0n);
 
   async function copy(what: "link" | "address") {
     await navigator.clipboard.writeText(what === "link" ? tipLink(jarId) : jarId);
@@ -131,18 +135,28 @@ function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner:
           Tip jar <span className="font-mono text-sm text-muted-foreground">{shortAddress(jarId)}</span>
         </CardTitle>
         <CardDescription>
-          {jar.data ? `${tipSummary(jar.data)} all-time` : "Loading..."}
+          {jar.data
+            ? `Received all-time: ${TOKENS.map((t) => `${formatAmount(jar.data[t.symbol].totalTipped + waiting(t), t)} ${t.symbol}`).join(" · ")}`
+            : "Loading..."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <p className="text-3xl font-semibold">{formatSui(funds + waiting)} SUI</p>
-          {waiting > 0n && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatSui(funds)} in the jar · <span className="text-sui">{formatSui(waiting)} waiting to collect</span> from
-              direct wallet sends ({waitingCount} {waitingCount === 1 ? "deposit" : "deposits"})
-            </p>
-          )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {TOKENS.map((t) => (
+            <div key={t.symbol} className="rounded-md border bg-muted/50 p-3">
+              <p className="text-2xl font-semibold">
+                {formatAmount(inJar(t) + waiting(t), t)} <span className="text-base text-muted-foreground">{t.symbol}</span>
+              </p>
+              {waiting(t) > 0n ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatAmount(inJar(t), t)} in the jar ·{" "}
+                  <span className="text-sui">{formatAmount(waiting(t), t)} waiting to collect</span>
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">all in the jar</p>
+              )}
+            </div>
+          ))}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => copy("link")}>
@@ -158,14 +172,17 @@ function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner:
               <ExternalLink className="h-4 w-4" /> Open tip page (QR)
             </Button>
           </a>
-          {deposits.data && waiting > 0n && (
+          {deposits.data && anyWaiting && (
             <Button variant="secondary" disabled={pending} onClick={() => run(collectDepositsTx(jarId, capId, deposits.data))}>
               <ArrowDownToLine className="h-4 w-4" /> Collect deposits
             </Button>
           )}
           <Button
-            disabled={pending || !deposits.data || funds + waiting === 0n}
-            onClick={() => deposits.data && run(withdrawAllTx(jarId, capId, owner, deposits.data))}
+            disabled={pending || !deposits.data || !jar.data || !anyHeld}
+            onClick={() =>
+              deposits.data &&
+              run(withdrawAllTx(jarId, capId, owner, deposits.data, { SUI: inJar(SUI), USDC: inJar(USDC) }))
+            }
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             Withdraw all
