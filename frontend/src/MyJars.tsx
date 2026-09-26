@@ -1,11 +1,21 @@
 import { useCurrentAccount, useCurrentClient } from "@mysten/dapp-kit-react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Loader2, Plus } from "lucide-react";
+import { ArrowDownToLine, Check, Copy, ExternalLink, History, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
-import { createJarTx, formatSui, OWNER_CAP_TYPE, OwnerCapBcs, tipSummary, withdrawAllTx } from "./tipJar";
+import { JarActivity } from "./JarActivity";
+import {
+  collectDepositsTx,
+  createJarTx,
+  formatSui,
+  OWNER_CAP_TYPE,
+  OwnerCapBcs,
+  tipSummary,
+  withdrawAllTx,
+} from "./tipJar";
 import { useJar } from "./useJar";
+import { usePendingDeposits } from "./usePendingDeposits";
 import { useTransact } from "./useTransact";
 
 export function tipLink(jarId: string) {
@@ -70,9 +80,13 @@ export function MyJars() {
 
 function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner: string }) {
   const jar = useJar(jarId);
+  const deposits = usePendingDeposits(jarId);
   const { run, pending, error } = useTransact();
   const [copied, setCopied] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const funds = jar.data ? BigInt(jar.data.funds) : 0n;
+  const waiting = deposits.data?.total ?? 0n;
+  const waitingCount = deposits.data ? deposits.data.coinIds.length + (deposits.data.addressBalance > 0n ? 1 : 0) : 0;
 
   async function copy() {
     await navigator.clipboard.writeText(tipLink(jarId));
@@ -89,7 +103,15 @@ function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner:
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-3xl font-semibold">{formatSui(funds)} SUI</p>
+        <div>
+          <p className="text-3xl font-semibold">{formatSui(funds + waiting)} SUI</p>
+          {waiting > 0n && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {formatSui(funds)} in the jar · <span className="text-sui">{formatSui(waiting)} waiting to collect</span> from
+              direct wallet sends ({waitingCount} {waitingCount === 1 ? "deposit" : "deposits"})
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={copy}>
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -100,12 +122,24 @@ function JarCard({ jarId, capId, owner }: { jarId: string; capId: string; owner:
               <ExternalLink className="h-4 w-4" /> Open tip page
             </Button>
           </a>
-          <Button disabled={pending || funds === 0n} onClick={() => run(withdrawAllTx(jarId, capId, owner))}>
+          {deposits.data && waiting > 0n && (
+            <Button variant="secondary" disabled={pending} onClick={() => run(collectDepositsTx(jarId, capId, deposits.data))}>
+              <ArrowDownToLine className="h-4 w-4" /> Collect deposits
+            </Button>
+          )}
+          <Button
+            disabled={pending || !deposits.data || funds + waiting === 0n}
+            onClick={() => deposits.data && run(withdrawAllTx(jarId, capId, owner, deposits.data))}
+          >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             Withdraw all
           </Button>
+          <Button variant="secondary" onClick={() => setShowActivity((s) => !s)}>
+            <History className="h-4 w-4" /> {showActivity ? "Hide activity" : "Activity"}
+          </Button>
         </div>
         {error && <p className="text-sm text-destructive-foreground">{error}</p>}
+        {showActivity && <JarActivity jarId={jarId} />}
       </CardContent>
     </Card>
   );

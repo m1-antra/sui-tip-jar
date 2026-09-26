@@ -2,28 +2,8 @@ import { useCurrentClient } from "@mysten/dapp-kit-react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
-import { formatSui, PACKAGE_ID, tipCount, TipJarBcs } from "./tipJar";
-
-const GRAPHQL_URL = "https://graphql.testnet.sui.io/graphql";
-
-/**
- * Every jar announces itself with a JarCreated event, so we can find all jars
- * without a backend: ask GraphQL for those events, then read each jar object.
- */
-async function fetchJarIds(): Promise<string[]> {
-  const res = await fetch(GRAPHQL_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      query: `query($type: String!) {
-        events(filter: { type: $type }, first: 50) { nodes { contents { json } } }
-      }`,
-      variables: { type: `${PACKAGE_ID}::tip_jar::JarCreated` },
-    }),
-  });
-  const body = await res.json();
-  return body.data.events.nodes.map((n: { contents: { json: { jar_id: string } } }) => n.contents.json.jar_id);
-}
+import { fetchJarIds } from "./graphql";
+import { formatSui, TipJarBcs } from "./tipJar";
 
 export function AllJars() {
   const client = useCurrentClient();
@@ -34,7 +14,14 @@ export function AllJars() {
       const ids = await fetchJarIds();
       if (ids.length === 0) return [];
       const { objects } = await client.getObjects({ objectIds: ids, include: { content: true } });
-      return objects.flatMap((o) => (o instanceof Error ? [] : [TipJarBcs.parse(o.content)]));
+      const parsed = objects.flatMap((o) => (o instanceof Error ? [] : [TipJarBcs.parse(o.content)]));
+      // Direct wallet sends wait at each jar's address until the owner collects them.
+      return Promise.all(
+        parsed.map(async (j) => {
+          const { balance } = await client.getBalance({ owner: j.id });
+          return { ...j, waiting: BigInt(balance.balance) };
+        }),
+      );
     },
   });
 
@@ -47,15 +34,20 @@ export function AllJars() {
   }
   if (jars.error) return <p className="text-destructive-foreground">{jars.error.message}</p>;
 
-  const held = jars.data.reduce((sum, j) => sum + BigInt(j.funds), 0n);
-  const tipped = jars.data.reduce((sum, j) => sum + BigInt(j.total_tipped), 0n);
+  const held = jars.data.reduce((sum, j) => sum + BigInt(j.funds) + j.waiting, 0n);
+  const waiting = jars.data.reduce((sum, j) => sum + j.waiting, 0n);
+  const received = jars.data.reduce((sum, j) => sum + BigInt(j.total_tipped) + j.waiting, 0n);
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Jars" value={jars.data.length.toString()} />
-        <Stat label="Held right now" value={`${formatSui(held)} SUI`} />
-        <Stat label="Tipped all-time" value={`${formatSui(tipped)} SUI`} />
+        <Stat
+          label="Held right now"
+          value={`${formatSui(held)} SUI`}
+          note={waiting > 0n ? `incl. ${formatSui(waiting)} SUI not yet collected` : undefined}
+        />
+        <Stat label="Received all-time" value={`${formatSui(received)} SUI`} />
       </div>
 
       <Card>
@@ -73,8 +65,11 @@ export function AllJars() {
               className="flex items-center justify-between gap-4 rounded-md border bg-muted/50 p-3 hover:bg-muted"
             >
               <span className="font-mono text-xs break-all">{j.id}</span>
-              <span className="shrink-0 text-sm">
-                {formatSui(j.funds)} SUI held · {tipCount(j.tip_count)}
+              <span className="shrink-0 text-right text-sm">
+                {formatSui(BigInt(j.funds) + j.waiting)} SUI held
+                {j.waiting > 0n && (
+                  <span className="block text-xs text-sui">{formatSui(j.waiting)} waiting to collect</span>
+                )}
               </span>
             </a>
           ))}
@@ -84,12 +79,13 @@ export function AllJars() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <Card>
       <CardHeader>
         <CardDescription>{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
+        {note && <p className="text-xs text-muted-foreground">{note}</p>}
       </CardHeader>
     </Card>
   );
